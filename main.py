@@ -1,9 +1,10 @@
 import asyncio
 import time
 import json
+from collections import deque
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.star import Context, Star, register
@@ -22,26 +23,30 @@ class GoThinkPlugin(Star):
         super().__init__(context)
         self.config = config
         
-        # ---- 配置项 ----
         self.idle_threshold = config.get("idle_threshold", 300)
         self.thinking_interval = config.get("thinking_interval", 600)
         self.max_thoughts = config.get("max_thoughts", 5)
-        self.context_message_limit = config.get("context_message_limit", 5)
+        self.context_message_limit = config.get("context_message_limit", 5)  # ✅ 新增
         self.enabled = config.get("enabled", True)
         self.debug_mode = config.get("debug_mode", True)
         self.log_thoughts = config.get("log_thoughts", True)
         self.log_thoughts_path = config.get("log_thoughts_path", "./data/logs/gothink/thoughts.jsonl")
         
-        # ---- 状态变量 ----
         self.last_user_activity = time.time()
         self.is_idle = False
         self.thinking_task: Optional[asyncio.Task] = None
         self.scheduler: Optional[AsyncIOScheduler] = None
-        self.thought_vault: list = []
+        self.thought_vault: List[dict] = []
         self.thought_count = 0
         self._active = True
+        # 最近对话缓存
+        self.context_cache = {}
+# 当前思考目标
+        self.focus_session_id = None
+
+        # 每个会话的思维链
+        self.thought_chains = {}
         
-        # ---- 初始化日志文件 ----
         if self.log_thoughts:
             self._init_log_file()
         
@@ -50,7 +55,7 @@ class GoThinkPlugin(Star):
         logger.info(f"[GoThink] 空闲阈值: {self.idle_threshold}秒")
         logger.info(f"[GoThink] 思考间隔: {self.thinking_interval}秒")
         logger.info(f"[GoThink] 最大缓存思考数: {self.max_thoughts}")
-        logger.info(f"[GoThink] 上下文消息条数: {self.context_message_limit}")
+        logger.info(f"[GoThink] 上下文参考条数: {self.context_message_limit}")  # ✅ 新增
         logger.info(f"[GoThink] 思考日志: {'开启' if self.log_thoughts else '关闭'}")
         if self.log_thoughts:
             logger.info(f"[GoThink] 日志路径: {self.log_thoughts_path}")
@@ -59,11 +64,9 @@ class GoThinkPlugin(Star):
         self._init_scheduler()
     
     def _init_log_file(self):
-        """初始化思考日志文件"""
         try:
             log_path = Path(self.log_thoughts_path)
             log_path.parent.mkdir(parents=True, exist_ok=True)
-            
             if not log_path.exists():
                 log_path.touch()
                 logger.info(f"[GoThink] 📁 创建思考日志文件: {log_path}")
@@ -74,10 +77,8 @@ class GoThinkPlugin(Star):
             self.log_thoughts = False
     
     def _write_thought_to_log(self, thought: str):
-        """将思考内容写入日志文件"""
         if not self.log_thoughts:
             return
-        
         try:
             log_path = Path(self.log_thoughts_path)
             entry = {
@@ -86,10 +87,8 @@ class GoThinkPlugin(Star):
                 "content": thought,
                 "character": "Nekoro"
             }
-            
             with open(log_path, "a", encoding="utf-8") as f:
                 f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-            
             logger.debug(f"[GoThink] 💾 思考已写入日志: {entry['id']}")
         except Exception as e:
             logger.error(f"[GoThink] ❌ 写入思考日志失败: {e}")
@@ -125,9 +124,41 @@ class GoThinkPlugin(Star):
         self.last_user_activity = time.time()
         logger.debug(f"[GoThink] 📩 收到用户消息")
         
+        if message and not message.startswith('/'):
+            self.last_topic_context = message[:200]
+
+            session_id = getattr(event, "unified_msg_origin", None)
+
+            if session_id:
+
+                if self.focus_session_id is None:
+                    self.focus_session_id = session_id
+
+                if session_id not in self.context_cache:
+                    self.context_cache[session_id] = deque(maxlen=20)
+
+                self.context_cache[session_id].append({
+                    "role": "user",
+                    "content": message[:500]
+                })
+
+                if session_id not in self.thought_chains:
+                    self.thought_chains[session_id] = []
+
+                logger.debug(
+                    f"[GoThink] 📚 缓存消息 | session={session_id} "
+                    f"| count={len(self.context_cache[session_id])}"
+                )
+
+                logger.debug(
+                    f"[GoThink] 📚 缓存消息 | session={session_id} "
+                    f"| count={len(self.context_cache[session_id])}"
+                )
+        
         if self.is_idle and self.thought_vault:
             logger.info(f"[GoThink] 🔔 用户唤醒，准备注入 {len(self.thought_vault)} 条思考")
             await self._on_wake_up(event)
+            self.focus_session_id = None
         
         if self.is_idle:
             self.is_idle = False
@@ -157,7 +188,6 @@ class GoThinkPlugin(Star):
             
             try:
                 thought = await self._generate_thought()
-                
                 if thought:
                     self._store_thought(thought)
                     self.thought_count += 1
@@ -165,7 +195,6 @@ class GoThinkPlugin(Star):
                     logger.debug(f"[GoThink] 📝 内容: {thought[:80]}...")
                 else:
                     logger.warning("[GoThink] ⚠️ 思考生成失败")
-                
             except Exception as e:
                 logger.error(f"[GoThink] ❌ 思考出错: {e}")
             
@@ -175,52 +204,46 @@ class GoThinkPlugin(Star):
         logger.info("[GoThink] 🔄 后台思考循环结束")
     
     async def _get_recent_context(self) -> str:
-        """获取最近的对话上下文，只取用户消息"""
-        limit = self.context_message_limit
-        
+        """
+        获取最近上下文
+        优先使用实时缓存
+        """
+
         try:
-            # 方法1：从 conversation_manager 获取
-            conv_mgr = self.context.conversation_manager
-            if conv_mgr:
-                session_id = getattr(self.context, 'unified_msg_origin', None)
-                if session_id:
-                    cid = await conv_mgr.get_curr_conversation_id(session_id)
-                    if cid:
-                        conv = await conv_mgr.get_conversation(session_id, cid)
-                        if conv and conv.history:
-                            history = json.loads(conv.history) if isinstance(conv.history, str) else conv.history
-                            if history:
-                                user_messages = []
-                                for msg in history[-20:]:  # 多取一些，确保够用
-                                    if msg.get('role') == 'user':
-                                        content = msg.get('message', '')
-                                        if content and len(content) > 0:
-                                            user_messages.append(content[:300])
-                                if user_messages:
-                                    # 取最后 limit 条
-                                    selected = user_messages[-limit:] if len(user_messages) > limit else user_messages
-                                    return "用户说：\n" + "\n".join(selected)
+            if not self.last_session_id:
+                return "（没有最近的对话内容）"
+
+            history = self.context_cache.get(
+                self.focus_session_id,
+                None
+            )
+
+            if not history:
+                return "（没有最近的对话内容）"
+
+            lines = []
+
+            for msg in list(history)[-self.context_message_limit:]:
+                role = "用户"
+
+                lines.append(
+                    f"{role}：{msg['content']}"
+                )
+
+            context = "\n".join(lines)
+
+            logger.debug(
+                f"[GoThink] 📖 获取上下文成功:\n{context}"
+            )
+
+            return context
+
         except Exception as e:
-            logger.debug(f"[GoThink] 方法1获取上下文失败: {e}")
-        
-        try:
-            # 方法2：直接从 context 的 _conversation_history 获取
-            if hasattr(self.context, '_conversation_history'):
-                history = self.context._conversation_history
-                if history:
-                    user_messages = []
-                    for msg in history[-20:]:
-                        if msg.get('role') == 'user':
-                            content = msg.get('message', '')
-                            if content and len(content) > 0:
-                                user_messages.append(content[:300])
-                    if user_messages:
-                        selected = user_messages[-limit:] if len(user_messages) > limit else user_messages
-                        return "用户说：\n" + "\n".join(selected)
-        except Exception as e:
-            logger.debug(f"[GoThink] 方法2获取上下文失败: {e}")
-        
-        return "（没有最近的对话内容）"
+            logger.error(
+                f"[GoThink] ❌ 获取上下文失败: {e}"
+            )
+
+            return "（没有最近的对话内容）"
     
     async def _generate_thought(self) -> Optional[str]:
         provider = self.context.get_using_provider()
@@ -229,29 +252,71 @@ class GoThinkPlugin(Star):
             return None
 
         recent_context = await self._get_recent_context()
+        previous_thoughts = []
+
+        if self.focus_session_id:
+            previous_thoughts = self.thought_chains.get(
+                self.focus_session_id,
+                []
+            )[-3:]
+        previous_context = "\n".join(previous_thoughts)
         
-        system_prompt = """你是一个善于思考的AI助手，名叫Nekoro。
+        system_prompt = """
+你是一个后台思维引擎。
 
-你的任务是围绕**用户最近的对话内容**进行思考，而不是思考"思考本身"。
+你的任务：
 
-强制规则：
-1. 你的思考必须基于用户最近说的具体话题展开
-2. 如果用户说了具体内容（如"晚上吃什么"），你的思考要围绕这个话题展开
-3. 禁止谈论AI、思考的本质、元认知等抽象话题
-4. 禁止分析用户意图
-5. 思考要自然、有温度，像一个人在心里琢磨事情
+根据用户最近的聊天内容，
+在用户离开期间继续联想。
 
-思考方向示例：
-- 如果用户说"晚上吃什么" → 思考ta可能喜欢的口味、推荐什么食物、有什么故事
-- 如果用户说"今天好累" → 思考ta经历了什么、怎么放松、有什么小建议
-- 如果用户说"随便" → 思考ta可能想随意聊聊、或者不太确定自己想要什么
+目标：
 
-请基于用户最近的具体话题进行思考，直接输出想法。"""
+发现新的聊天方向，
+帮助下一轮对话更加自然。
 
-        user_prompt = f"""用户最近的对话内容：
+规则：
+
+1. 必须基于最近聊天内容
+2. 不允许讨论AI
+3. 不允许讨论思考本身
+4. 不允许讨论自己正在思考
+5. 必须具体
+6. 必须围绕实际话题
+
+输出格式：
+
+主题：
+（当前主要话题）
+
+延伸：
+（1~3个值得继续聊的方向）
+
+想法：
+（一个具体的新角度）
+"""
+
+        user_prompt = f"""
+最近聊天内容：
+
 {recent_context}
 
-请基于以上内容，进行贴近话题的、自然的思考。"""
+之前已经产生的思考：
+
+{previous_context}
+
+要求：
+
+1. 继续深化之前的思考
+2. 不要重复已有内容
+3. 不要重新总结聊天
+4. 必须提出新的观察
+
+输出：
+
+主题：
+延伸：
+想法：
+"""
 
         try:
             response = await provider.text_chat(
@@ -276,8 +341,20 @@ class GoThinkPlugin(Star):
             "presented": False
         }
         self.thought_vault.append(entry)
-        
-        # 写入磁盘
+        if self.focus_session_id:
+
+            if self.focus_session_id not in self.thought_chains:
+                self.thought_chains[self.focus_session_id] = []
+
+            self.thought_chains[
+                self.focus_session_id
+            ].append(thought)
+
+            self.thought_chains[
+                self.focus_session_id
+            ] = self.thought_chains[
+                self.focus_session_id
+            ][-10:]
         self._write_thought_to_log(thought)
         
         if len(self.thought_vault) > self.max_thoughts:
@@ -332,7 +409,6 @@ class GoThinkPlugin(Star):
     
     @filter.command("gothink_peek")
     async def peek_thoughts(self, event: AstrMessageEvent):
-        """查看最近的思考内容。用法：/gothink_peek"""
         if not self.thought_vault:
             yield event.plain_result("💭 当前没有缓存的思考内容")
             return
