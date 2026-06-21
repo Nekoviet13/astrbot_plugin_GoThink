@@ -1,6 +1,6 @@
 """Repository implementations for memory aggregates."""
 
-from typing import Optional, Sequence
+from collections.abc import Sequence
 
 from ..interfaces.storage import IThoughtDAO
 from ..models import Thought
@@ -22,7 +22,7 @@ class ThoughtRepository:
             self._dao.update(thought)
         return thought
 
-    def get(self, thought_id: str) -> Optional[Thought]:
+    def get(self, thought_id: str) -> Thought | None:
         """Return one thought by ID if it exists."""
         return self._dao.get_by_id(thought_id)
 
@@ -32,7 +32,7 @@ class ThoughtRepository:
 
     def recent(
         self,
-        object_id: Optional[str] = None,
+        object_id: str | None = None,
         limit: int = 20,
     ) -> Sequence[Thought]:
         """Return recent thoughts."""

@@ -1,7 +1,7 @@
 """Tests for the thought domain model."""
 
-from dataclasses import FrozenInstanceError
 import unittest
+from dataclasses import FrozenInstanceError
 
 from core.models import MemoryType, Thought
 

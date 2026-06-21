@@ -1,6 +1,7 @@
 """Non-singleton registry infrastructure."""
 
-from typing import Dict, Generic, Iterable, Optional, TypeVar
+from collections.abc import Iterable
+from typing import Generic, TypeVar
 
 T = TypeVar("T")
 
@@ -10,7 +11,7 @@ class BaseRegistry(Generic[T]):
 
     def __init__(self) -> None:
         """Create an empty registry."""
-        self._items: Dict[str, T] = {}
+        self._items: dict[str, T] = {}
 
     def register(self, name: str, item: T) -> None:
         """Register an item by name."""
@@ -18,7 +19,7 @@ class BaseRegistry(Generic[T]):
             raise ValueError("registry name must not be empty")
         self._items[name] = item
 
-    def get(self, name: str) -> Optional[T]:
+    def get(self, name: str) -> T | None:
         """Return a registered item by name if it exists."""
         return self._items.get(name)
 

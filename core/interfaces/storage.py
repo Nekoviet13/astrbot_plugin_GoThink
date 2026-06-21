@@ -1,6 +1,7 @@
 """Storage ports for persistence infrastructure."""
 
-from typing import Optional, Protocol, Sequence
+from collections.abc import Sequence
+from typing import Protocol
 
 from ..models import Thought
 from ..models.enums import MemoryType
@@ -21,12 +22,12 @@ class IThoughtDAO(Protocol):
     def delete(self, thought_id: str) -> None:
         """Delete a thought record by ID."""
 
-    def get_by_id(self, thought_id: str) -> Optional[Thought]:
+    def get_by_id(self, thought_id: str) -> Thought | None:
         """Return one thought by ID if it exists."""
 
     def list_recent(
         self,
-        object_id: Optional[str] = None,
+        object_id: str | None = None,
         limit: int = 20,
     ) -> Sequence[Thought]:
         """Return recent thoughts ordered by timestamp descending."""
@@ -51,7 +52,7 @@ class IThoughtRepository(Protocol):
     def save(self, thought: Thought) -> Thought:
         """Persist and return the thought."""
 
-    def get(self, thought_id: str) -> Optional[Thought]:
+    def get(self, thought_id: str) -> Thought | None:
         """Return one thought by ID if it exists."""
 
     def remove(self, thought_id: str) -> None:
@@ -59,7 +60,7 @@ class IThoughtRepository(Protocol):
 
     def recent(
         self,
-        object_id: Optional[str] = None,
+        object_id: str | None = None,
         limit: int = 20,
     ) -> Sequence[Thought]:
         """Return recent thoughts."""

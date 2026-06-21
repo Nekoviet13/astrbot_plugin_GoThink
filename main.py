@@ -2,7 +2,7 @@
 
 import re
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 from astrbot.api import llm_tool, logger
 from astrbot.api.event import AstrMessageEvent, filter
@@ -24,7 +24,7 @@ from .integrations.astrbot.adapter import AstrBotMemoryAdapter
 class GoThinkPlugin(AstrBotMemoryAdapter, Star):
     """AstrBot plugin entrypoint and GoThink dependency composer."""
 
-    def __init__(self, context: Context, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, context: Context, config: dict[str, Any] | None = None):
         """Create GoThink infrastructure and wire runtime dependencies."""
         super().__init__(context)
         self.context = context
@@ -143,7 +143,9 @@ class GoThinkPlugin(AstrBotMemoryAdapter, Star):
 
         unified_id = self._get_unified_id(event)
         if self._should_handle_user(unified_id):
-            self._record_thought(unified_id, self.ai_name, self._tool_call_text(args, kwargs))
+            self._record_thought(
+                unified_id, self.ai_name, self._tool_call_text(args, kwargs)
+            )
 
     @filter.command_group("GoThink")
     @filter.permission_type(filter.PermissionType.ADMIN)
@@ -184,8 +186,12 @@ class GoThinkPlugin(AstrBotMemoryAdapter, Star):
         """Show lightweight memory storage statistics."""
         unified_id = self._get_unified_id(event)
         _, object_id = self._parse_object_info(unified_id)
-        recent_count = len(self.thought_repository.recent(object_id=object_id, limit=100))
-        yield event.plain_result(f"GoThink 已启用。当前会话最近可读记忆数：{recent_count}")
+        recent_count = len(
+            self.thought_repository.recent(object_id=object_id, limit=100)
+        )
+        yield event.plain_result(
+            f"GoThink 已启用。当前会话最近可读记忆数：{recent_count}"
+        )
 
     @llm_tool(name="recall_memory_tool")
     async def recall_memory_tool(

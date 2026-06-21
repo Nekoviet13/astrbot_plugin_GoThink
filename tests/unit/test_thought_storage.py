@@ -1,8 +1,8 @@
 """Tests for thought DAO and repository persistence."""
 
+import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-import unittest
 
 from core.models import MemoryType, Thought
 from core.storage.dao import SQLiteThoughtDAO

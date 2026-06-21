@@ -3,16 +3,16 @@
 import json
 import random
 import re
+from collections.abc import Iterable, Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Iterable, Optional, Sequence
+from typing import Any
 
 from astrbot.api import logger
 from astrbot.api.provider import ProviderRequest
 from astrbot.core.conversation_mgr import Conversation
 
 from ...core.models import Thought
-
 
 RECALL_KEYWORDS = (
     "之前",
@@ -37,13 +37,13 @@ class AstrBotMemoryAdapter:
             return path
         return (base_dir / path).resolve()
 
-    def _should_handle_user(self, unified_id: Optional[str]) -> bool:
+    def _should_handle_user(self, unified_id: str | None) -> bool:
         """Return whether GoThink should process this conversation."""
         if not self.enabled or not unified_id:
             return False
         return not self.target_user_id_list or unified_id in self.target_user_id_list
 
-    def _get_unified_id(self, event: Any) -> Optional[str]:
+    def _get_unified_id(self, event: Any) -> str | None:
         """Extract AstrBot's unified conversation ID from an event."""
         actual_event = getattr(event, "event", event)
         for attr in ("unified_id", "unified_msg_origin"):
@@ -87,7 +87,7 @@ class AstrBotMemoryAdapter:
                 return str(value)
         return self.username
 
-    def _parse_object_info(self, unified_id: Optional[str]) -> tuple[str, str]:
+    def _parse_object_info(self, unified_id: str | None) -> tuple[str, str]:
         """Parse object type and object ID from a unified ID."""
         if not unified_id:
             return "unknown", "unknown"
@@ -112,8 +112,8 @@ class AstrBotMemoryAdapter:
         character: str,
         content: str,
         importance: int = 5,
-        metadata: Optional[Dict[str, Any]] = None,
-    ) -> Optional[Thought]:
+        metadata: dict[str, Any] | None = None,
+    ) -> Thought | None:
         """Persist one conversation thought."""
         content = content.strip()
         if not content:
@@ -176,7 +176,9 @@ class AstrBotMemoryAdapter:
         match = re.search(r"#([^\s#]+)", content)
         return match.group(1) if match else ""
 
-    def _search_relevant(self, object_id: str, query: str, limit: int) -> Sequence[Thought]:
+    def _search_relevant(
+        self, object_id: str, query: str, limit: int
+    ) -> Sequence[Thought]:
         """Search relevant memories for one object."""
         words = [word for word in re.split(r"\s+", query.strip()) if word]
         keyword = max(words, key=len) if words else query.strip()
@@ -199,13 +201,15 @@ class AstrBotMemoryAdapter:
             return True
 
         conversation: Conversation = await conv_mgr.get_conversation(uid, current_id)
-        return not conversation or not conversation.history or conversation.history == "[]"
+        return (
+            not conversation or not conversation.history or conversation.history == "[]"
+        )
 
     def _provider_request(
         self,
         args: Sequence[Any],
-        kwargs: Dict[str, Any],
-    ) -> Optional[ProviderRequest]:
+        kwargs: dict[str, Any],
+    ) -> ProviderRequest | None:
         """Find AstrBot's ProviderRequest in callback arguments."""
         req = kwargs.get("req")
         if isinstance(req, ProviderRequest):
@@ -215,7 +219,7 @@ class AstrBotMemoryAdapter:
                 return arg
         return None
 
-    def _tool_call_text(self, args: Sequence[Any], kwargs: Dict[str, Any]) -> str:
+    def _tool_call_text(self, args: Sequence[Any], kwargs: dict[str, Any]) -> str:
         """Format a tool call response into memory text."""
         tool_name = kwargs.get("tool_name") or (args[0] if args else "unknown")
         tool_args = kwargs.get("args") or (args[1] if len(args) > 1 else {})

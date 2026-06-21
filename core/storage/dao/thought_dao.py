@@ -2,9 +2,10 @@
 
 import json
 import sqlite3
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterator, Optional, Sequence
+from typing import Any
 
 from ...models import Thought
 from ...models.enums import MemoryType
@@ -49,8 +50,7 @@ class SQLiteThoughtDAO:
                 "ON thoughts(session_id)"
             )
             conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_thoughts_object "
-                "ON thoughts(object_id)"
+                "CREATE INDEX IF NOT EXISTS idx_thoughts_object ON thoughts(object_id)"
             )
 
     def insert(self, thought: Thought) -> None:
@@ -102,7 +102,7 @@ class SQLiteThoughtDAO:
         with self._connection() as conn:
             conn.execute("DELETE FROM thoughts WHERE id = ?", (thought_id,))
 
-    def get_by_id(self, thought_id: str) -> Optional[Thought]:
+    def get_by_id(self, thought_id: str) -> Thought | None:
         """Return one thought by ID if it exists."""
         with self._connection() as conn:
             row = conn.execute(
@@ -113,7 +113,7 @@ class SQLiteThoughtDAO:
 
     def list_recent(
         self,
-        object_id: Optional[str] = None,
+        object_id: str | None = None,
         limit: int = 20,
     ) -> Sequence[Thought]:
         """Return recent thoughts ordered by timestamp descending."""

@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any
 
 from .enums import MemoryType
 
@@ -23,13 +23,13 @@ class Thought:
     platform: str = ""
     object_type: str = ""
     object_id: str = ""
-    importance: Optional[int] = None
+    importance: int | None = None
     memory_type: MemoryType = MemoryType.EPISODIC
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     created_at: str = field(default_factory=_now_iso)
     updated_at: str = field(default_factory=_now_iso)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert this thought to a storage-friendly dictionary."""
         return {
             "id": self.id,
@@ -48,7 +48,7 @@ class Thought:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Thought":
+    def from_dict(cls, data: dict[str, Any]) -> "Thought":
         """Create a thought from a dictionary."""
         memory_type = data.get("memory_type", MemoryType.EPISODIC)
         if isinstance(memory_type, str):
