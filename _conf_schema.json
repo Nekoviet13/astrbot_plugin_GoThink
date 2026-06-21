@@ -1,49 +1,50 @@
 {
   "enabled": {
-    "description": "启用 GoThink 俺寻思",
-    "type": "bool",
-    "default": true
-  },
-  "idle_threshold": {
-    "description": "空闲阈值（秒）",
-    "type": "int",
-    "default": 300,
-    "hint": "用户连续沉默多少秒后进入空闲状态"
-  },
-  "thinking_interval": {
-    "description": "思考间隔（秒）",
-    "type": "int",
-    "default": 600,
-    "hint": "进入空闲状态后，每隔多少秒进行一次后台思考"
-  },
-  "max_thoughts": {
-    "description": "最大缓存思考数",
-    "type": "int",
-    "default": 5,
-    "hint": "内存中最多保留多少条思考成果，超出后移除最早的"
-  },
-  "context_message_limit": {
-    "description": "思考时参考的用户消息条数",
-    "type": "int",
-    "default": 5,
-    "hint": "后台思考时获取最近 N 条用户消息作为上下文，建议 3-10 条"
-  },
-  "debug_mode": {
-    "description": "调试模式",
+    "description": "启用 GoThink",
     "type": "bool",
     "default": true,
-    "hint": "开启后输出更详细的调试日志"
+    "hint": "关闭后不会记录或召回记忆。"
   },
-  "log_thoughts": {
-    "description": "将思考内容写入磁盘",
-    "type": "bool",
-    "default": true,
-    "hint": "开启后，所有思考内容会保存到 data/logs/gothink/thoughts.jsonl"
-  },
-  "log_thoughts_path": {
-    "description": "思考日志存储路径",
+  "memory_db_path": {
+    "description": "记忆数据库路径",
     "type": "string",
-    "default": "./data/logs/gothink/thoughts.jsonl",
-    "hint": "可自定义存储路径，支持相对路径或绝对路径"
+    "default": "GoThink/thoughts.db",
+    "hint": "相对路径会基于 AstrBot 数据目录解析，也支持绝对路径。"
+  },
+  "realtime_recording": {
+    "description": "实时记录对话",
+    "type": "bool",
+    "default": true,
+    "hint": "开启后会记录用户消息、AI 回复和工具调用。"
+  },
+  "target_user_id_list": {
+    "description": "目标会话 ID 列表",
+    "type": "list",
+    "default": [],
+    "hint": "留空表示处理所有会话；填写后只处理列表中的 unified_id。"
+  },
+  "username": {
+    "description": "用户默认名称",
+    "type": "string",
+    "default": "User",
+    "hint": "无法从事件中识别发送者昵称时使用。"
+  },
+  "ai_name": {
+    "description": "AI 名称",
+    "type": "string",
+    "default": "Assistant",
+    "hint": "记录 AI 回复和工具调用时使用。"
+  },
+  "auto_recall_probability": {
+    "description": "自动召回概率",
+    "type": "float",
+    "default": 0.3,
+    "hint": "每次请求自动尝试召回相关记忆的概率，范围建议 0 到 1。"
+  },
+  "recent_injection_limit": {
+    "description": "新会话注入记忆数",
+    "type": "int",
+    "default": 10,
+    "hint": "检测到新会话时，最多注入多少条最近记忆。"
   }
 }

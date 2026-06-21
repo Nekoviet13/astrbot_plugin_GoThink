@@ -1,0 +1,1 @@
+"""GoThink test suite."""
