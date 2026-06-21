@@ -6,8 +6,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator, Optional, Sequence
 
-from core.models import Thought
-from core.models.enums import MemoryType
+from ...models import Thought
+from ...models.enums import MemoryType
 
 
 class SQLiteThoughtDAO:

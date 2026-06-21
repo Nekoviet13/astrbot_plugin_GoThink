@@ -2,9 +2,9 @@
 
 from typing import Optional, Sequence
 
-from core.interfaces.storage import IThoughtDAO
-from core.models import Thought
-from core.models.enums import MemoryType
+from ..interfaces.storage import IThoughtDAO
+from ..models import Thought
+from ..models.enums import MemoryType
 
 
 class ThoughtRepository:

@@ -1,6 +1,7 @@
 """AstrBot composition root for GoThink."""
 
 import re
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from astrbot.api import llm_tool, logger
@@ -31,7 +32,7 @@ class GoThinkPlugin(AstrBotMemoryAdapter, Star):
         self.clock = SystemClock()
         self.id_generator = UUIDGenerator()
 
-        data_dir = StarTools.get_data_dir()
+        data_dir = self._plugin_data_dir()
         db_path = self._resolve_path(
             self.config.get("memory_db_path", "GoThink/thoughts.db"),
             data_dir,
@@ -53,6 +54,19 @@ class GoThinkPlugin(AstrBotMemoryAdapter, Star):
         self.recent_injection_limit = int(self.config.get("recent_injection_limit", 10))
 
         logger.info("[GoThink] loaded with SQLite storage: %s", db_path)
+
+    def _plugin_data_dir(self) -> Path:
+        """Return AstrBot's plugin data directory with a local fallback."""
+        try:
+            return StarTools.get_data_dir()
+        except RuntimeError as error:
+            fallback = Path(__file__).resolve().parent / "data"
+            logger.warning(
+                "[GoThink] failed to get AstrBot data dir, using %s: %s",
+                fallback,
+                error,
+            )
+            return fallback
 
     @filter.on_llm_request()
     async def on_llm_request(self, event: Any, *args: Any, **kwargs: Any) -> None:

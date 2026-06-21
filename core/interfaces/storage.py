@@ -2,8 +2,8 @@
 
 from typing import Optional, Protocol, Sequence
 
-from core.models import Thought
-from core.models.enums import MemoryType
+from ..models import Thought
+from ..models.enums import MemoryType
 
 
 class IThoughtDAO(Protocol):
