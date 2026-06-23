@@ -58,6 +58,7 @@ GoThink 不是“聊天记录存档器”，而是一个正在成型的认知记
 ```json
 {
   "enabled": true,
+  "debug_mode": false,
   "memory_db_path": "GoThink/thoughts.db",
   "realtime_recording": true,
   "target_user_id_list": [],
@@ -75,6 +76,7 @@ GoThink 不是“聊天记录存档器”，而是一个正在成型的认知记
 | 配置项 | 说明 |
 | --- | --- |
 | `enabled` | 是否启用 GoThink |
+| `debug_mode` | 是否输出后台调试日志，开启后日志前缀为 `[GoThink:debug]` |
 | `memory_db_path` | 记忆数据库路径，相对路径基于 AstrBot 插件数据目录 |
 | `realtime_recording` | 是否实时记录对话 |
 | `target_user_id_list` | 目标会话 ID 列表，留空表示记录所有会话 |

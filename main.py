@@ -18,7 +18,7 @@ from .integrations.astrbot.adapter import AstrBotMemoryAdapter
     "astrbot_plugin_GoThink",
     "Nekoviet13",
     "GoThink cognitive memory framework",
-    "v1.0.0",
+    "v1.3.0",
     "https://github.com/Nekoviet13/astrbot_plugin_GoThink",
 )
 class GoThinkPlugin(AstrBotMemoryAdapter, Star):
@@ -52,8 +52,18 @@ class GoThinkPlugin(AstrBotMemoryAdapter, Star):
             self.config.get("auto_recall_probability", 0.3)
         )
         self.recent_injection_limit = int(self.config.get("recent_injection_limit", 10))
+        self.debug_mode = bool(self.config.get("debug_mode", False))
 
         logger.info("[GoThink] loaded with SQLite storage: %s", db_path)
+        self._debug(
+            "config enabled=%s realtime_recording=%s target_count=%s "
+            "auto_recall_probability=%s recent_injection_limit=%s",
+            self.enabled,
+            self.realtime_recording,
+            len(self.target_user_id_list),
+            self.auto_recall_probability,
+            self.recent_injection_limit,
+        )
 
     def _plugin_data_dir(self) -> Path:
         """Return AstrBot's plugin data directory with a local fallback."""
@@ -73,19 +83,32 @@ class GoThinkPlugin(AstrBotMemoryAdapter, Star):
         """Record user input and inject relevant memory before LLM generation."""
         unified_id = self._get_unified_id(event)
         if not self._should_handle_user(unified_id):
+            self._debug(
+                "skip llm_request unified_id=%s enabled=%s target_limited=%s",
+                unified_id,
+                self.enabled,
+                bool(self.target_user_id_list),
+            )
             return
 
         text = self._plain_text(event)
+        self._debug("llm_request unified_id=%s text_len=%s", unified_id, len(text))
         if self.realtime_recording and text:
-            self._record_thought(
+            thought = self._record_thought(
                 unified_id=unified_id,
                 character=self._get_sender_name(event),
                 content=text,
                 metadata={"topic": self._extract_topic(text)},
             )
+            self._debug("recorded user thought id=%s", getattr(thought, "id", None))
 
         req = self._provider_request(args, kwargs)
         if not req or not text:
+            self._debug(
+                "skip recall injection has_request=%s has_text=%s",
+                bool(req),
+                bool(text),
+            )
             return
 
         _, object_id = self._parse_object_info(unified_id)
@@ -104,6 +127,12 @@ class GoThinkPlugin(AstrBotMemoryAdapter, Star):
         clean_text = re.sub(r"<system_reminder>.*?</system_reminder>", "", text)
         if self._should_auto_recall(clean_text):
             related = self._search_relevant(object_id, clean_text, limit=5)
+            self._debug(
+                "auto recall object_id=%s related_found=%s query_len=%s",
+                object_id,
+                len(related),
+                len(clean_text),
+            )
             if related:
                 req.system_prompt += self._format_recall_block(
                     "自动回想 - 相关记忆片段",
@@ -115,37 +144,56 @@ class GoThinkPlugin(AstrBotMemoryAdapter, Star):
     async def on_llm_response(self, event: Any, *args: Any, **kwargs: Any) -> None:
         """Record assistant responses after LLM generation."""
         if not self.realtime_recording:
+            self._debug("skip llm_response realtime_recording=false")
             return
 
         unified_id = self._get_unified_id(event)
         if not self._should_handle_user(unified_id):
+            self._debug("skip llm_response unified_id=%s", unified_id)
             return
 
         resp = kwargs.get("resp") or (args[0] if args else getattr(event, "resp", None))
         if not resp:
+            self._debug("skip llm_response no_response")
             return
 
         extra = getattr(resp, "extra", {})
         if isinstance(extra, dict):
             thinking = extra.get("think", "") or extra.get("reasoning", "")
             if thinking:
-                self._record_thought(unified_id, self.ai_name, f"(thinking) {thinking}")
+                thought = self._record_thought(
+                    unified_id, self.ai_name, f"(thinking) {thinking}"
+                )
+                self._debug(
+                    "recorded assistant thinking id=%s len=%s",
+                    getattr(thought, "id", None),
+                    len(thinking),
+                )
 
         text = str(getattr(resp, "completion_text", "") or "").strip()
         if text:
-            self._record_thought(unified_id, self.ai_name, text)
+            thought = self._record_thought(unified_id, self.ai_name, text)
+            self._debug(
+                "recorded assistant response id=%s len=%s",
+                getattr(thought, "id", None),
+                len(text),
+            )
 
     @filter.on_llm_tool_respond()
     async def on_llm_tool_respond(self, event: Any, *args: Any, **kwargs: Any) -> None:
         """Record tool calls as assistant-side operational memories."""
         if not self.realtime_recording:
+            self._debug("skip tool_response realtime_recording=false")
             return
 
         unified_id = self._get_unified_id(event)
         if self._should_handle_user(unified_id):
-            self._record_thought(
+            thought = self._record_thought(
                 unified_id, self.ai_name, self._tool_call_text(args, kwargs)
             )
+            self._debug("recorded tool response id=%s", getattr(thought, "id", None))
+        else:
+            self._debug("skip tool_response unified_id=%s", unified_id)
 
     @filter.command_group("GoThink")
     @filter.permission_type(filter.PermissionType.ADMIN)
@@ -160,6 +208,12 @@ class GoThinkPlugin(AstrBotMemoryAdapter, Star):
         unified_id = self._get_unified_id(event)
         _, object_id = self._parse_object_info(unified_id)
         thoughts = self.thought_repository.recent(object_id=object_id, limit=limit)
+        self._debug(
+            "command recent object_id=%s limit=%s result=%s",
+            object_id,
+            limit,
+            len(thoughts),
+        )
         if not thoughts:
             yield event.plain_result("还没有找到记忆。")
             return
@@ -176,6 +230,12 @@ class GoThinkPlugin(AstrBotMemoryAdapter, Star):
         unified_id = self._get_unified_id(event)
         _, object_id = self._parse_object_info(unified_id)
         thoughts = self._search_relevant(object_id, query, limit=20)
+        self._debug(
+            "command search object_id=%s query=%s result=%s",
+            object_id,
+            query,
+            len(thoughts),
+        )
         if not thoughts:
             yield event.plain_result(f"没有找到包含「{query}」的记忆。")
             return
@@ -188,6 +248,11 @@ class GoThinkPlugin(AstrBotMemoryAdapter, Star):
         _, object_id = self._parse_object_info(unified_id)
         recent_count = len(
             self.thought_repository.recent(object_id=object_id, limit=100)
+        )
+        self._debug(
+            "command stats object_id=%s recent_count=%s",
+            object_id,
+            recent_count,
         )
         yield event.plain_result(
             f"GoThink 已启用。当前会话最近可读记忆数：{recent_count}"

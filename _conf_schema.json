@@ -5,6 +5,12 @@
     "default": true,
     "hint": "关闭后不会记录或召回记忆。"
   },
+  "debug_mode": {
+    "description": "调试模式",
+    "type": "bool",
+    "default": false,
+    "hint": "开启后会在后台日志输出 GoThink 的记录、跳过、召回和命令查询情况。"
+  },
   "memory_db_path": {
     "description": "记忆数据库路径",
     "type": "string",

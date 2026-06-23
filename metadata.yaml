@@ -1,9 +1,9 @@
-name: astrbot_plugin_GoThink # 插件唯一识别名，以 astrbot_plugin_ 前缀开头
-display_name: GoThink 俺寻思 # 用于展示的名字，可以是方便人类阅读的名字（需要版本 >= v4.5.0，低版本不会报错，请放心填写）
-desc: 让你的机器人在你不在的时候主动消化并搜索新内容 # 插件简短描述
-version: v1.0.0 # 插件版本号。格式：v1.1.1 或者 v1.1
-author: Nekoviet13 # 作者
-repo: https://github.com/Nekoviet13/astrbot_plugin_GoThink # 插件的仓库地址
-astrbot_version: ">=4.11.2" # 插件适配的 AstrBot 版本范围
-support_platforms: # 请替换为你的插件实际支持的平台
+name: astrbot_plugin_GoThink
+display_name: GoThink 俺寻思
+desc: 为 QQ AstrBot 机器人提供长期记忆、自动记录与上下文召回能力的认知记忆插件。
+version: v1.3.0
+author: Nekoviet13
+repo: https://github.com/Nekoviet13/astrbot_plugin_GoThink
+astrbot_version: ">=4.11.2"
+support_platforms:
   - qq_official

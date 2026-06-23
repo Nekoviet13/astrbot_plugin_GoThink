@@ -30,6 +30,11 @@ RECALL_KEYWORDS = (
 class AstrBotMemoryAdapter:
     """Reusable AstrBot memory behavior for the registered plugin."""
 
+    def _debug(self, message: str, *args: Any) -> None:
+        """Write a debug log when GoThink debug mode is enabled."""
+        if getattr(self, "debug_mode", False):
+            logger.info("[GoThink:debug] " + message, *args)
+
     def _resolve_path(self, path_str: str, base_dir: Path) -> Path:
         """Resolve a configured path against AstrBot's data directory."""
         path = Path(path_str)
@@ -182,11 +187,19 @@ class AstrBotMemoryAdapter:
         """Search relevant memories for one object."""
         words = [word for word in re.split(r"\s+", query.strip()) if word]
         keyword = max(words, key=len) if words else query.strip()
-        return [
+        thoughts = [
             thought
             for thought in self.thought_repository.search(keyword, limit=limit * 3)
             if thought.object_id == object_id
         ][:limit]
+        self._debug(
+            "search relevant object_id=%s keyword=%s limit=%s result=%s",
+            object_id,
+            keyword,
+            limit,
+            len(thoughts),
+        )
+        return thoughts
 
     async def _is_new_conversation(self, event: Any, unified_id: str) -> bool:
         """Return whether the current AstrBot conversation appears empty."""
@@ -232,5 +245,14 @@ class AstrBotMemoryAdapter:
     def _should_auto_recall(self, text: str) -> bool:
         """Return whether a request should trigger automatic memory recall."""
         hit_keyword = any(keyword in text for keyword in RECALL_KEYWORDS)
-        hit_probability = random.random() <= self.auto_recall_probability
-        return hit_keyword or hit_probability
+        roll = random.random()
+        hit_probability = roll <= self.auto_recall_probability
+        should_recall = hit_keyword or hit_probability
+        self._debug(
+            "auto recall decision keyword=%s roll=%.4f probability=%.4f result=%s",
+            hit_keyword,
+            roll,
+            self.auto_recall_probability,
+            should_recall,
+        )
+        return should_recall
